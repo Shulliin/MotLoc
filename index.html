@@ -66,7 +66,7 @@
                 </div>
                 
                 <div class="flex items-center space-x-3">
-                    <!-- Install App Button (Visible when supported) -->
+                    <!-- Install App Button -->
                     <button id="pwa-install-btn" onclick="installPWA()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shadow flex items-center gap-1.5">
                         <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Instalar</span> App
                     </button>
@@ -241,17 +241,29 @@
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                     <div>
                         <h1 class="text-xl font-bold text-slate-800">Cadastro de Clientes</h1>
-                        <p class="text-sm text-slate-500">Ordem alfabética, gestão de saldos, lançamentos de crédito/débito e extrato.</p>
+                        <p class="text-sm text-slate-500">Ordem alfabética, gestão de saldos, arquivamento e remoção.</p>
                     </div>
                     <button onclick="openNewClientModal()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-medium shadow-sm transition flex items-center justify-center gap-2">
                         <i class="fa-solid fa-user-plus"></i> Cadastrar Cliente
                     </button>
                 </div>
 
-                <!-- Search -->
-                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center px-4">
-                    <i class="fa-solid fa-magnifying-glass text-slate-400 mr-3"></i>
-                    <input type="text" id="client-search-input" oninput="renderClientsList()" placeholder="Pesquisar cliente por nome..." class="w-full bg-transparent border-none text-sm outline-none text-slate-700">
+                <!-- Search and Filter Bar -->
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center gap-3 px-4">
+                    <div class="flex items-center flex-1 w-full">
+                        <i class="fa-solid fa-magnifying-glass text-slate-400 mr-3"></i>
+                        <input type="text" id="client-search-input" oninput="renderClientsList()" placeholder="Pesquisar cliente por nome..." class="w-full bg-transparent border-none text-sm outline-none text-slate-700">
+                    </div>
+                    
+                    <!-- View toggle: Active vs Archived -->
+                    <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
+                        <button id="btn-show-active-clients" onclick="setClientStatusFilter(false)" class="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-slate-800 shadow-sm transition">
+                            <i class="fa-solid fa-user-check mr-1"></i> Ativos
+                        </button>
+                        <button id="btn-show-archived-clients" onclick="setClientStatusFilter(true)" class="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md text-slate-500 hover:text-slate-800 transition">
+                            <i class="fa-solid fa-box-archive mr-1"></i> Arquivados
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Clients Grid -->
@@ -271,7 +283,10 @@
                     <div class="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
                         <img id="detail-client-photo" src="" alt="Avatar" class="w-20 h-20 rounded-full object-cover border-4 border-slate-100 shadow">
                         <div>
-                            <h2 id="detail-client-name" class="text-2xl font-bold text-slate-800">--</h2>
+                            <div class="flex items-center gap-2 justify-center sm:justify-start">
+                                <h2 id="detail-client-name" class="text-2xl font-bold text-slate-800">--</h2>
+                                <span id="detail-client-archived-badge" class="hidden text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold"><i class="fa-solid fa-box-archive mr-1"></i>Arquivado</span>
+                            </div>
                             <p id="detail-client-phone" class="text-xs text-slate-500 mt-0.5"><i class="fa-solid fa-phone mr-1"></i>--</p>
                             <div class="inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold" id="detail-client-balance-badge">
                                 Saldo Atual: <span id="detail-client-balance">R$ 0,00</span>
@@ -285,6 +300,12 @@
                         </button>
                         <button onclick="openEditClientModal(currentDetailClientId)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center justify-center gap-1">
                             <i class="fa-solid fa-pen-to-square"></i> Editar
+                        </button>
+                        <button id="btn-detail-toggle-archive" onclick="toggleArchiveClient(currentDetailClientId)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center justify-center gap-1">
+                            <!-- Populated dynamically -->
+                        </button>
+                        <button onclick="deleteClient(currentDetailClientId)" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
                 </div>
@@ -731,16 +752,15 @@
         let bikes = [];
         let activeRentals = [];
         let history = [];
-        let hourlyRate = 10; // Default: R$ 10 per hour
+        let hourlyRate = 10;
         let currentDetailClientId = null;
         let activeReturnRentalId = null;
         let pendingConfirmCallback = null;
+        let showArchivedClients = false;
 
-        /* PWA Installation Prompt Deferred Variable */
         let deferredPrompt = null;
 
         function setupPWA() {
-            /* Generate inline web app manifest */
             const manifestObj = {
                 name: "MotoRent PRO",
                 short_name: "MotoRent",
@@ -763,7 +783,6 @@
             const manifestURL = URL.createObjectURL(blob);
             document.getElementById('pwa-manifest').setAttribute('href', manifestURL);
 
-            /* Listen for install prompt */
             window.addEventListener('beforeinstallprompt', (e) => {
                 e.preventDefault();
                 deferredPrompt = e;
@@ -771,7 +790,6 @@
                 if (btn) btn.classList.remove('hidden');
             });
 
-            /* Register inline minimal service worker */
             if ('serviceWorker' in navigator) {
                 const swCode = `
                     self.addEventListener('install', (e) => self.skipWaiting());
@@ -806,10 +824,14 @@
 
                 if (storedClients) {
                     clients = JSON.parse(storedClients);
+                    // Ensure archived field exists
+                    clients.forEach(c => {
+                        if (c.archived === undefined) c.archived = false;
+                    });
                 } else {
                     clients = [
-                        { id: 'c_1', name: 'João Silva', phone: '(11) 98765-4321', photo: '', balance: 0 },
-                        { id: 'c_2', name: 'Maria Oliveira', phone: '(11) 91234-5678', photo: '', balance: 0 }
+                        { id: 'c_1', name: 'João Silva', phone: '(11) 98765-4321', photo: '', balance: 0, archived: false },
+                        { id: 'c_2', name: 'Maria Oliveira', phone: '(11) 91234-5678', photo: '', balance: 0, archived: false }
                     ];
                 }
 
@@ -858,6 +880,11 @@
                 toast.classList.add('opacity-0', 'translate-y-2');
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) modal.classList.add('hidden');
         }
 
         function askConfirmation(title, message, onConfirm) {
@@ -969,8 +996,11 @@
                 return;
             }
 
-            if (clients.length === 0) {
-                showToast('Cadastre ao menos um cliente antes de criar uma locação.', 'error');
+            // Standard available clients (not archived)
+            const activeClients = clients.filter(c => !c.archived);
+
+            if (activeClients.length === 0) {
+                showToast('Cadastre ao menos um cliente ativo antes de criar uma locação.', 'error');
                 return;
             }
 
@@ -980,7 +1010,7 @@
             const clientSelect = document.getElementById('rental-client-select');
             const bikeSelect = document.getElementById('rental-bike-select');
 
-            clientSelect.innerHTML = clients.map(c => `<option value="${c.id}">${c.name} (Saldo: R$ ${c.balance.toFixed(2)})</option>`).join('');
+            clientSelect.innerHTML = activeClients.map(c => `<option value="${c.id}">${c.name} (Saldo: R$ ${c.balance.toFixed(2)})</option>`).join('');
             bikeSelect.innerHTML = availableBikes.map(b => `<option value="${b.id}">${b.model} - ${b.plate}</option>`).join('');
 
             const now = new Date();
@@ -998,7 +1028,9 @@
             document.getElementById('rental-edit-id').value = rental.id;
 
             const clientSelect = document.getElementById('rental-client-select');
-            clientSelect.innerHTML = clients.map(c => `<option value="${c.id}" ${c.id === rental.clientId ? 'selected' : ''}>${c.name} (Saldo: R$ ${c.balance.toFixed(2)})</option>`).join('');
+            clientSelect.innerHTML = clients
+                .filter(c => !c.archived || c.id === rental.clientId)
+                .map(c => `<option value="${c.id}" ${c.id === rental.clientId ? 'selected' : ''}>${c.name} (Saldo: R$ ${c.balance.toFixed(2)})</option>`).join('');
 
             const bikeSelect = document.getElementById('rental-bike-select');
             bikeSelect.innerHTML = bikes
@@ -1430,6 +1462,24 @@
             saveAllData();
         }
 
+        /* CLIENT MANAGEMENT (LISTING, FILTERING, ARCHIVING & REMOVAL) */
+        function setClientStatusFilter(archivedStatus) {
+            showArchivedClients = archivedStatus;
+            
+            const btnActive = document.getElementById('btn-show-active-clients');
+            const btnArchived = document.getElementById('btn-show-archived-clients');
+
+            if (archivedStatus) {
+                btnArchived.className = 'flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-slate-800 shadow-sm transition';
+                btnActive.className = 'flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md text-slate-500 hover:text-slate-800 transition';
+            } else {
+                btnActive.className = 'flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-slate-800 shadow-sm transition';
+                btnArchived.className = 'flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md text-slate-500 hover:text-slate-800 transition';
+            }
+
+            renderClientsList();
+        }
+
         function renderClientsList() {
             const container = document.getElementById('clients-container');
             const search = (document.getElementById('client-search-input')?.value || '').toLowerCase();
@@ -1438,10 +1488,14 @@
             container.innerHTML = '';
 
             const sorted = [...clients].sort((a, b) => a.name.localeCompare(b.name));
-            const filtered = sorted.filter(c => c.name.toLowerCase().includes(search));
+            const filtered = sorted.filter(c => 
+                c.archived === showArchivedClients && 
+                c.name.toLowerCase().includes(search)
+            );
 
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="col-span-2 text-center py-8 text-slate-400 text-sm">Nenhum cliente encontrado.</div>`;
+                const emptyMsg = showArchivedClients ? 'Nenhum cliente arquivado.' : 'Nenhum cliente ativo encontrado.';
+                container.innerHTML = `<div class="col-span-2 text-center py-8 text-slate-400 text-sm">${emptyMsg}</div>`;
                 return;
             }
 
@@ -1452,25 +1506,87 @@
                 const avatarUrl = client.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(client.name)}&background=0D8ABC&color=fff`;
                 const balanceColor = client.balance >= 0 ? 'text-blue-700 bg-blue-50' : 'text-rose-700 bg-rose-50';
 
+                const archiveBtnTitle = client.archived ? 'Desarquivar Cliente' : 'Arquivar Cliente';
+                const archiveBtnIcon = client.archived ? 'fa-box-open' : 'fa-box-archive';
+
                 card.innerHTML = `
                     <div class="flex items-center space-x-3 cursor-pointer flex-1" onclick="openClientDetail('${client.id}')">
                         <img src="${avatarUrl}" alt="${client.name}" class="w-12 h-12 rounded-full object-cover border border-slate-200 shadow-sm" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(client.name)}'">
                         <div>
-                            <h3 class="font-bold text-slate-800 text-sm sm:text-base">${client.name}</h3>
+                            <div class="flex items-center gap-1.5">
+                                <h3 class="font-bold text-slate-800 text-sm sm:text-base">${client.name}</h3>
+                                ${client.archived ? '<span class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-semibold">Arquivado</span>' : ''}
+                            </div>
                             <p class="text-xs text-slate-400"><i class="fa-solid fa-phone text-slate-300 mr-1"></i>${client.phone || 'Sem telefone'}</p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="px-3 py-1.5 rounded-full text-xs font-bold ${balanceColor}">
+                    <div class="flex items-center gap-1.5">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-bold ${balanceColor}">
                             R$ ${client.balance.toFixed(2)}
                         </span>
                         <button onclick="openEditClientModal('${client.id}')" title="Editar Cliente" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition">
                             <i class="fa-solid fa-pen"></i>
                         </button>
+                        <button onclick="toggleArchiveClient('${client.id}')" title="${archiveBtnTitle}" class="p-2 text-slate-400 hover:text-amber-600 hover:bg-slate-100 rounded-lg transition">
+                            <i class="fa-solid ${archiveBtnIcon}"></i>
+                        </button>
+                        <button onclick="deleteClient('${client.id}')" title="Remover Cliente" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
                     </div>
                 `;
                 container.appendChild(card);
             });
+        }
+
+        function toggleArchiveClient(clientId) {
+            const client = clients.find(c => c.id === clientId);
+            if (!client) return;
+
+            // Prevent archiving if active rental exists
+            const hasActiveRental = activeRentals.some(r => r.clientId === clientId);
+            if (!client.archived && hasActiveRental) {
+                showToast('Não é possível arquivar um cliente com locação ativa em andamento.', 'error');
+                return;
+            }
+
+            client.archived = !client.archived;
+            saveAllData();
+
+            const actionName = client.archived ? 'arquivado' : 'desarquivado';
+            showToast(`Cliente ${client.name} ${actionName} com sucesso!`, 'success');
+
+            if (currentDetailClientId === clientId) {
+                openClientDetail(clientId);
+            }
+            renderClientsList();
+        }
+
+        function deleteClient(clientId) {
+            const client = clients.find(c => c.id === clientId);
+            if (!client) return;
+
+            // Check if client has active rentals
+            const hasActiveRental = activeRentals.some(r => r.clientId === clientId);
+            if (hasActiveRental) {
+                showToast('Não é possível remover um cliente com moto alugada no momento.', 'error');
+                return;
+            }
+
+            askConfirmation(
+                'Remover Cliente',
+                `Tem certeza de que deseja excluir ${client.name}? Esta ação é irreversível.`,
+                () => {
+                    clients = clients.filter(c => c.id !== clientId);
+                    saveAllData();
+
+                    if (currentDetailClientId === clientId) {
+                        closeClientDetail();
+                    }
+                    renderClientsList();
+                    showToast('Cliente removido com sucesso!', 'success');
+                }
+            );
         }
 
         function openNewClientModal() {
@@ -1515,7 +1631,8 @@
                     name,
                     phone,
                     photo,
-                    balance: 0
+                    balance: 0,
+                    archived: false
                 });
             }
 
@@ -1640,6 +1757,20 @@
             document.getElementById('detail-client-photo').src = avatarUrl;
             document.getElementById('detail-client-name').innerText = client.name;
             document.getElementById('detail-client-phone').innerText = client.phone || 'Sem Telefone';
+
+            const archivedBadge = document.getElementById('detail-client-archived-badge');
+            if (client.archived) {
+                archivedBadge.classList.remove('hidden');
+            } else {
+                archivedBadge.classList.add('hidden');
+            }
+
+            const archiveBtn = document.getElementById('btn-detail-toggle-archive');
+            if (client.archived) {
+                archiveBtn.innerHTML = '<i class="fa-solid fa-box-open"></i> Desarquivar';
+            } else {
+                archiveBtn.innerHTML = '<i class="fa-solid fa-box-archive"></i> Arquivar';
+            }
             
             const balanceEl = document.getElementById('detail-client-balance');
             const badgeEl = document.getElementById('detail-client-balance-badge');
@@ -1671,22 +1802,17 @@
                 const formattedEnd = item.isDirectPayment ? 'Lançamento Direto' : (item.dateEnd ? `${item.dateEnd.split('-').reverse().join('/')} ${item.timeEnd}` : '--');
 
                 tr.innerHTML = `
-                    <td class="p-3 font-mono text-slate-500">${formattedStart}</td>
-                    <td class="p-3 font-mono text-slate-500">${formattedEnd}</td>
+                    <td class="p-3 font-mono text-xs text-slate-500">${formattedStart}</td>
+                    <td class="p-3 font-mono text-xs text-slate-500">${formattedEnd}</td>
                     <td class="p-3 font-medium text-slate-800">${item.bikeName}</td>
-                    <td class="p-3 text-slate-800 font-semibold">R$ ${item.amountCharged.toFixed(2)}</td>
+                    <td class="p-3 text-slate-800">R$ ${item.amountCharged.toFixed(2)}</td>
                     <td class="p-3 text-emerald-600 font-semibold">R$ ${item.amountPaid.toFixed(2)}</td>
                     <td class="p-3 text-slate-500">R$ ${item.balanceBefore.toFixed(2)}</td>
-                    <td class="p-3 font-bold ${item.balanceAfter < 0 ? 'text-rose-600' : 'text-blue-600'}">R$ ${item.balanceAfter.toFixed(2)}</td>
+                    <td class="p-3 font-bold ${item.balanceAfter >= 0 ? 'text-blue-700' : 'text-rose-600'}">R$ ${item.balanceAfter.toFixed(2)}</td>
                     <td class="p-3 text-right">
-                        <div class="flex items-center justify-end gap-1">
-                            <button onclick="openEditHistoryModal('${item.id}')" title="Editar Registro" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition">
-                                <i class="fa-solid fa-pen"></i>
-                            </button>
-                            <button onclick="deleteHistoryItem('${item.id}')" title="Excluir Registro" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
-                        </div>
+                        <button onclick="openEditHistoryModal('${item.id}')" title="Editar" class="p-1 text-slate-400 hover:text-blue-600 transition">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -1706,24 +1832,30 @@
             if (!list) return;
 
             list.innerHTML = '';
-
             bikes.forEach(bike => {
                 const isRented = bike.status === 'RENTED';
+                const statusBadge = isRented 
+                    ? `<span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-semibold">Em Uso</span>`
+                    : `<span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Disponível</span>`;
+
                 const div = document.createElement('div');
-                div.className = 'py-3 flex items-center justify-between';
+                div.className = 'py-3 flex items-center justify-between gap-3';
                 div.innerHTML = `
-                    <div>
-                        <div class="font-bold text-slate-800">${bike.model}</div>
-                        <div class="text-xs text-slate-400 font-mono">${bike.plate}</div>
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-slate-100 rounded-lg text-slate-600">
+                            <i class="fa-solid fa-motorcycle"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-800 text-sm">${bike.model}</p>
+                            <p class="text-xs text-slate-400 font-mono">${bike.plate}</p>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs px-2.5 py-1 rounded-full font-semibold ${isRented ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
-                            ${isRented ? 'Em Uso' : 'Disponível'}
-                        </span>
-                        <button onclick="openEditBikeModal('${bike.id}')" title="Editar Moto" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition">
+                    <div class="flex items-center space-x-3">
+                        ${statusBadge}
+                        <button onclick="openEditBikeModal('${bike.id}')" class="p-1.5 text-slate-400 hover:text-blue-600 rounded transition">
                             <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button onclick="deleteBike('${bike.id}')" ${isRented ? 'disabled title="Não é possível remover moto em uso"' : ''} class="text-slate-400 hover:text-rose-600 disabled:opacity-30 p-1.5">
+                        <button onclick="deleteBike('${bike.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded transition">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -1734,21 +1866,20 @@
 
         function saveHourlyRate() {
             const val = parseFloat(document.getElementById('setting-hourly-rate').value);
-            if (isNaN(val) || val <= 0) {
+            if (!val || val <= 0) {
                 showToast('Informe um valor de hora válido.', 'error');
                 return;
             }
-            hourlyRate = Math.ceil(val);
-            document.getElementById('setting-hourly-rate').value = hourlyRate;
+            hourlyRate = val;
             saveAllData();
-            showToast('Valor da hora atualizado com sucesso!', 'success');
+            showToast('Valor da tarifa atualizado!', 'success');
         }
 
         function openNewBikeModal() {
             document.getElementById('modal-bike-title').innerText = 'Cadastrar Nova Moto';
             document.getElementById('bike-edit-id').value = '';
-            document.getElementById('bike-status-container').classList.add('hidden');
             document.getElementById('form-bike').reset();
+            document.getElementById('bike-status-container').classList.add('hidden');
             document.getElementById('modal-bike-form').classList.remove('hidden');
         }
 
@@ -1760,11 +1891,9 @@
             document.getElementById('bike-edit-id').value = bike.id;
             document.getElementById('bike-model-input').value = bike.model;
             document.getElementById('bike-plate-input').value = bike.plate;
-            
-            const statusContainer = document.getElementById('bike-status-container');
-            statusContainer.classList.remove('hidden');
             document.getElementById('bike-status-input').value = bike.status;
-
+            
+            document.getElementById('bike-status-container').classList.remove('hidden');
             document.getElementById('modal-bike-form').classList.remove('hidden');
         }
 
@@ -1773,6 +1902,7 @@
             const editId = document.getElementById('bike-edit-id').value;
             const model = document.getElementById('bike-model-input').value.trim();
             const plate = document.getElementById('bike-plate-input').value.trim().toUpperCase();
+            const status = document.getElementById('bike-status-input').value;
 
             if (!model || !plate) return;
 
@@ -1781,7 +1911,7 @@
                 if (bike) {
                     bike.model = model;
                     bike.plate = plate;
-                    bike.status = document.getElementById('bike-status-input').value;
+                    bike.status = status;
                 }
             } else {
                 bikes.push({
@@ -1795,41 +1925,30 @@
             saveAllData();
             closeModal('modal-bike-form');
             renderSettings();
-            renderActiveRentals();
             showToast('Moto salva com sucesso!', 'success');
         }
 
         function deleteBike(bikeId) {
-            const bike = bikes.find(b => b.id === bikeId);
-            if (!bike) return;
-
-            if (bike.status === 'RENTED') {
-                showToast('Esta moto está alugada e não pode ser removida.', 'error');
+            const isRented = activeRentals.some(r => r.bikeId === bikeId);
+            if (isRented) {
+                showToast('Não é possível excluir uma moto que está alugada no momento.', 'error');
                 return;
             }
 
-            askConfirmation(
-                'Remover Moto',
-                `Deseja remover a moto ${bike.model} (${bike.plate}) da frota?`,
-                () => {
-                    bikes = bikes.filter(b => b.id !== bikeId);
-                    saveAllData();
-                    renderSettings();
-                    showToast('Moto removida da frota com sucesso.', 'success');
-                }
-            );
+            askConfirmation('Excluir Moto', 'Tem certeza de que deseja remover esta moto da frota?', () => {
+                bikes = bikes.filter(b => b.id !== bikeId);
+                saveAllData();
+                renderSettings();
+                showToast('Moto removida com sucesso!', 'success');
+            });
         }
 
-        function closeModal(modalId) {
-            const modal = document.getElementById(modalId);
-            if (modal) modal.classList.add('hidden');
-        }
-
+        /* INITIALIZATION */
         window.addEventListener('DOMContentLoaded', () => {
             setupPWA();
             loadData();
             startClock();
-            switchTab('active-rentals');
+            renderActiveRentals();
         });
     </script>
 </body>
